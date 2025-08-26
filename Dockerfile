@@ -1,31 +1,33 @@
-FROM php:8.2-fpm
+FROM php:8.3-fpm
 
-# Instala extensiones necesarias (incluye PostgreSQL)
+# Instala dependencias del sistema y extensiones necesarias para Laravel + PostgreSQL
 RUN apt-get update && apt-get install -y \
-    git unzip libpng-dev libonig-dev libxml2-dev zip curl \
+    git \
+    unzip \
+    libzip-dev \
+    zip \
     libpq-dev \
-    && docker-php-ext-install pdo_pgsql pdo_mysql mbstring exif pcntl bcmath gd
+    libonig-dev \
+    libxml2-dev \
+    curl \
+    && docker-php-ext-install pdo pdo_pgsql mbstring zip exif pcntl
 
-# Instala Composer
+# Instala Composer desde la imagen oficial
 COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 
-WORKDIR /var/www
+# Establece el directorio de trabajo
+WORKDIR /var/www/html
+
+# Copia los archivos del proyecto
 COPY . .
 
-# Instala dependencias PHP y JS, y compila assets
-RUN composer install --no-dev --optimize-autoloader
-RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
-    apt-get install -y nodejs && \
-    npm install && npm run build
+# Habilita plugin de Laravel para que Composer no falle
+RUN composer config --no-plugins allow-plugins.laravel/serializable-closure true
 
-# Optimiza Laravel y ejecuta tareas necesarias
-RUN php artisan config:cache && php artisan route:cache && php artisan view:cache
-RUN php artisan migrate --force || true
-RUN php artisan storage:link || true
+# Instala las dependencias PHP del proyecto
+RUN composer install --no-interaction --prefer-dist --optimize-autoloader
 
-# Permisos
-RUN chown -R www-data:www-data /var/www/storage /var/www/bootstrap/cache
+# Abre puerto
+EXPOSE 8000
 
-EXPOSE 8080
-
-CMD php artisan serve --host 0.0.0.0 --port 8080
+CMD php artisan migrate --force && php artisan serve --host=0.0.0.0 --port=8000
